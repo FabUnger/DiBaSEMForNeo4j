@@ -26,6 +26,9 @@ public class EvDijkstraAlgorithm {
     public Stream<VisitedNodeResult> executeEvDijkstra(@Name("startId") String startId, @Name("endId") String endId, @Name("maxSoc") double maxSoc, @Name("initialCharge") double initialCharge, @Name("minChargingTime") double minChargingTime) {
         NodeContainer start = this.getNodeById(startId);
         NodeContainer end = this.getNodeById(endId);
+        if (start == null || end == null) {
+            return Stream.empty();
+        }
 
         PriorityQueue queue = new PriorityQueue();
 
@@ -36,11 +39,11 @@ public class EvDijkstraAlgorithm {
 
         while (!queue.isEmpty()) {
             // Aktuell bearbeiteter Knoten = u aus queue holen
-            Path pathOfU = this.pathOfNode.get(queue.poll());
+            Path pathOfU = pathOfNode.get(queue.poll());
             VisitedNode u = pathOfU.getLastNode();
 
             // Falls u der Zielknoten ist, wird while-Schleife beendet
-            if (u.id().getName().equals(end.id())) {
+            if (u.id().getName().equals(end.id)) {
                 // Endknoten gefunden. Dessen Nachbarn muessen nicht mehr ueberprueft werden.
                 result = pathOfU;
                 break;
@@ -169,10 +172,6 @@ public class EvDijkstraAlgorithm {
                         lastStationChargingTime = minChargingTime;
                     }
 
-                    // Berechne die neue Reisezeit von Start nach v
-                    double newTravelTimeV = currentTravelTime - oldChargingTime + lastStationChargingTime;
-
-
                     // Erstelle den neuen Weg nach v
                     List<VisitedNode> visitedNodes = new ArrayList<>();
 
@@ -254,21 +253,24 @@ public class EvDijkstraAlgorithm {
                         VisitedNode node = visitedNodes.get(i);
                         VisitedNode successor = visitedNodesFromU.get(i + 1);
                         double  edgeConsumption = this.getShortestEdgeBetweenNodes(node.id().getName(), successor.id().getName()).consumption;
-                        double edgeDuration = this.getShortestEdgeBetweenNodes(node.id().getName(), successor.id().getName()).duration + edgeConsumption;
+                        double edgeDuration = this.getShortestEdgeBetweenNodes(node.id().getName(), successor.id().getName()).duration;
                         VisitedNode visitedNode = new VisitedNode(successor.id().getName(), node.travelTime() + edgeDuration, node.soc() - edgeConsumption, successor.chargingTime());
                         visitedNodes.add(visitedNode);
                     }
 
                     // Erstelle ein neues VisitedNode-Objekt fuer v
                     VisitedNode newU = visitedNodes.get(visitedNodes.size() - 1);
-                    newTravelTimeV = newU.travelTime() + this.getShortestEdgeBetweenNodes(newU.id().getName(), v.id()).duration;
+                    // Berechne die neue Reisezeit von Start nach v
+                    double newTravelTimeV = newU.travelTime() + this.getShortestEdgeBetweenNodes(newU.id().getName(), v.id()).duration;
                     VisitedNode visitedNodeV = new VisitedNode(v.id(), newTravelTimeV, newSocV, 0.0);
-
-                    // Vervollstaendige die Liste durch Hinzufuegen von v und erstelle ein Path-Objekt und fuege dieses zu pathOfNode hinzu, sowie den VisitedNode von v zur Queue
-                    visitedNodes.add(visitedNodeV);
-                    Path path = new Path(visitedNodes);
-                    pathOfNode.put(visitedNodeV.id(), path);
-                    queue.put(visitedNodeV.id(), newTravelTimeV);
+                    // Ueberpruefe, ob der neue Zustand von v schlechter als irgendein anderer Zustand in V ist
+                    if (this.checkIfCurrentNodeIsBetter(visitedNodeV)) {
+                        // Vervollstaendige die Liste durch Hinzufuegen von v und erstelle ein Path-Objekt und fuege dieses zu pathOfNode hinzu, sowie den VisitedNode von v zur Queue
+                        visitedNodes.add(visitedNodeV);
+                        Path path = new Path(visitedNodes);
+                        pathOfNode.put(visitedNodeV.id(), path);
+                        queue.put(visitedNodeV.id(), newTravelTimeV);
+                    }
                 }
                 else {
                     // Ladestand bei v groesser als 0, genuegend Energie vorhanden, um v erreichen zu koennen, sodass nicht geladen werden muss
@@ -277,11 +279,14 @@ public class EvDijkstraAlgorithm {
                     List<VisitedNode> visitedNodes = new ArrayList<>(pathOfU.getPath());
                     // Erstelle ein VisitedNode-Objekt fuer v, fuege dieses sowohl zur Liste fuer den neuen Pfad als auch zur Queue hinzu
                     VisitedNode visitedNodeV = new VisitedNode(v.id(), currentTravelTime, currentSoc, 0.0);
-                    visitedNodes.add(visitedNodeV);
-                    queue.put(visitedNodeV.id(), currentTravelTime);
-                    // Erstelle einen neuen Pfad fuer den Knoten v
-                    Path path = new Path(visitedNodes);
-                    pathOfNode.put(visitedNodeV.id(), path);
+                    // Ueberpruefe, ob der neue Zustand von v schlechter als irgendein anderer Zustand in V ist
+                    if (this.checkIfCurrentNodeIsBetter(visitedNodeV)) {
+                        visitedNodes.add(visitedNodeV);
+                        queue.put(visitedNodeV.id(), currentTravelTime);
+                        // Erstelle einen neuen Pfad fuer den Knoten v
+                        Path path = new Path(visitedNodes);
+                        pathOfNode.put(visitedNodeV.id(), path);
+                    }
                 }
             }
         }
@@ -313,6 +318,31 @@ public class EvDijkstraAlgorithm {
         pathOfNode.put(startNode.id(), path);
         // Fuege ausschließlich den Startknoten zur Priority Queue hinzu
         queue.put(startNode.id(), 0.0);
+    }
+
+    private boolean checkIfCurrentNodeIsBetter(VisitedNode visitedNode) {
+        for (Map.Entry<VisitedNodeId, Path> entry : pathOfNode.entrySet()) {
+            VisitedNodeId nodeId = entry.getKey();
+            Path path = entry.getValue();
+
+            // Prüfen, ob der Name des aktuellen Knotens mit dem Namen des Knotens im Path übereinstimmt
+            if (nodeId.getName().equals(visitedNode.id().getName())) {
+                VisitedNode nodeInPath = path.getNodeById(nodeId);
+
+                // Wenn der Knoten gefunden wurde, vergleichen Sie die Reisezeit und den SOC
+                if (nodeInPath != null) {
+                    if (visitedNode.travelTime() > nodeInPath.travelTime() && visitedNode.soc() < nodeInPath.soc()) {
+                        // Der aktuelle Knoten ist schlechter oder gleich in Bezug auf Reisezeit und SOC
+                        return false;
+                    } else {
+                        // Der aktuelle Knoten ist besser in Bezug auf Reisezeit und SOC
+                        continue;
+                    }
+                }
+            }
+        }
+        // Der aktuelle Knoten ist besser als alle Knoten mit demselben Namen im Path
+        return true;
     }
 
     private double calculateNewSoc(double maxSoc, double soc, double chargingTime, double chargingPower) {
