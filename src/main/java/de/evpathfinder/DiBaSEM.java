@@ -9,7 +9,7 @@ import org.neo4j.procedure.*;
 import java.util.*;
 import java.util.stream.Stream;
 
-public class EvDijkstraAlgorithm {
+public class DiBaSEM {
 
     @Context
     public Transaction tx;
@@ -23,7 +23,7 @@ public class EvDijkstraAlgorithm {
     private static Map<VisitedNodeId, Path> pathOfNode;
 
     @Procedure
-    public Stream<VisitedNodeResult> executeEvDijkstra(@Name("startId") String startId, @Name("endId") String endId, @Name("maxSoc") double maxSoc, @Name("initialCharge") double initialCharge, @Name("minChargingTime") double minChargingTime) {
+    public Stream<VisitedNodeResult> executeDiBaSEM(@Name("startId") String startId, @Name("endId") String endId, @Name("maxSoc") double maxSoc, @Name("initialCharge") double initialCharge, @Name("minChargingTime") double minChargingTime) {
         NodeContainer start = this.getNodeById(startId);
         NodeContainer end = this.getNodeById(endId);
         if (start == null || end == null) {
