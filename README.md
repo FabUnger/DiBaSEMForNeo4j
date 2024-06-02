@@ -1,1 +1,5 @@
-# EvDijkstraForNeo4j
+# DiBaSEMForNeo4j
+
+## Authors
+
+[@FabUnger](https://github.com/FabUnger)
